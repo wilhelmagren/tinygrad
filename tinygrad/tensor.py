@@ -2002,10 +2002,22 @@ class Tensor:
     print(t.conv2d(w).numpy())
     ```
     """
+
     (bs,cin_), (cout,cin), HW = self.shape[:2], weight.shape[:2], weight.shape[2:]
     assert groups*cin == cin_ and len(self.shape) == len(weight.shape), f"Input Tensor shape {self.shape} does not match the shape of the weights {weight.shape}. ({groups*cin} vs. {cin_})"  # noqa: E501
-    if isinstance(padding, (tuple,list)): assert len(padding) == 2*len(HW) or len(padding) == len(HW), f"Expected padding of length {2*len(HW)} or {len(HW)}, but got {len(padding)} for tensor of shape {self.shape}"  # noqa: E501
-    padding_ = self._padding2d(padding, len(HW))
+    if padding == "same":
+      if stride != 1:
+        raise RuntimeError("padding='same' is only supported for stride=1 convolutions")
+      padding_ = [0, 0] * len(weight.shape)
+      dilation = dilation if len(dilation) == len(HW) else make_pair(dilation, len(HW))
+      for d, k, i in zip(dilation, HW, range(len(HW) - 1, -1, -1)):
+        tp = d * (k - 1)
+        lp = tp // 2
+        padding_[2 * i] = lp
+        padding_[2 * i + 1] = tp - lp
+    else:
+      if isinstance(padding, (tuple,list)): assert len(padding) == 2*len(HW) or len(padding) == len(HW), f"Expected padding of length {2*len(HW)} or {len(HW)}, but got {len(padding)} for tensor of shape {self.shape}"  # noqa: E501
+      padding_ = self._padding2d(padding, len(HW))
 
     # conv2d is a pooling op (with padding)
     x = self.pad2d(padding_)._pool(HW, stride, dilation)   # (bs, groups*cin, oy, ox, H, W)
